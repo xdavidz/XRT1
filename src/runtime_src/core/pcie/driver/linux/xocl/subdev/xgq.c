@@ -1870,6 +1870,9 @@ static int xgq_vmr_probe(struct platform_device *pdev)
 	return ret;
 
 attach_failed:
+	/* dump any device logs if attach failed */
+	xgq_vmr_log_dump_all(xgq);
+
 	platform_set_drvdata(pdev, NULL);
 	xocl_drvinst_release(xgq, &hdl);
 	xocl_drvinst_free(hdl);
