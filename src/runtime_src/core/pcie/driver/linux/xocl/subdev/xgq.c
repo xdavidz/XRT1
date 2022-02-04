@@ -242,70 +242,6 @@ static int complete_worker(void *data)
 	return xw->error ? 1 : 0;
 }
 
-static bool xgq_submitted_cmd_check(struct xocl_xgq_vmr *xgq)
-{
-	struct xocl_xgq_vmr_cmd *xgq_cmd = NULL;
-	struct list_head *pos = NULL, *next = NULL;
-	bool found_timeout = false;
-
-	mutex_lock(&xgq->xgq_lock);
-	list_for_each_safe(pos, next, &xgq->xgq_submitted_cmds) {
-		xgq_cmd = list_entry(pos, struct xocl_xgq_vmr_cmd, xgq_cmd_list);
-
-		/* Finding timed out cmds */
-		if (xgq_cmd->xgq_cmd_timeout_jiffies < jiffies) {
-			XGQ_ERR(xgq, "cmd id: %d op: 0x%x timed out, hot reset is required!",
-				xgq_cmd->xgq_cmd_entry.hdr.cid,
-				xgq_cmd->xgq_cmd_entry.hdr.opcode);
-			found_timeout = true;
-			break;
-		}
-	}
-	mutex_unlock(&xgq->xgq_lock);
-
-	return found_timeout;
-}
-
-static void xgq_submitted_cmds_drain(struct xocl_xgq_vmr *xgq)
-{
-	struct xocl_xgq_vmr_cmd *xgq_cmd = NULL;
-	struct list_head *pos = NULL, *next = NULL;
-
-	mutex_lock(&xgq->xgq_lock);
-	list_for_each_safe(pos, next, &xgq->xgq_submitted_cmds) {
-		xgq_cmd = list_entry(pos, struct xocl_xgq_vmr_cmd, xgq_cmd_list);
-
-		/* Finding timed out cmds */
-		if (xgq_cmd->xgq_cmd_timeout_jiffies < jiffies) {
-			list_del(pos);
-			
-			xgq_cmd->xgq_cmd_rcode = -ETIME;
-			complete(&xgq_cmd->xgq_cmd_complete);
-			XGQ_ERR(xgq, "cmd id: %d timed out, hot reset is required!",
-				xgq_cmd->xgq_cmd_entry.hdr.cid);
-		}
-	}
-	mutex_unlock(&xgq->xgq_lock);
-}
-
-/*
- * When driver detach, we need to wait for all commands to drain.
- * If the one command is already timedout, we can safely recycle it only
- * after disable interrupts and mark device in bad state, a hot_reset
- * is needed to recover the device back to normal.
- */
-static bool xgq_submitted_cmds_empty(struct xocl_xgq_vmr *xgq)
-{
-	mutex_lock(&xgq->xgq_lock);
-	if (list_empty(&xgq->xgq_submitted_cmds)) {
-		mutex_unlock(&xgq->xgq_lock);
-		return true;
-	}
-	mutex_unlock(&xgq->xgq_lock);
-	
-	return false;
-}
-
 static void xgq_vmr_log_dump(struct xocl_xgq_vmr *xgq, int num_recs, bool dump_to_debug_log)
 {
 	struct vmr_log log = { 0 };
@@ -354,6 +290,58 @@ static void xgq_vmr_log_dump_all(struct xocl_xgq_vmr *xgq)
 	xgq_vmr_log_dump(xgq, VMR_LOG_MAX_RECS, false);
 }
 
+static bool xgq_submitted_cmds_check(struct xocl_xgq_vmr *xgq)
+{
+	struct xocl_xgq_vmr_cmd *xgq_cmd = NULL;
+	struct list_head *pos = NULL, *next = NULL;
+	int count_timeout = 0;
+
+	mutex_lock(&xgq->xgq_lock);
+	list_for_each_safe(pos, next, &xgq->xgq_submitted_cmds) {
+		xgq_cmd = list_entry(pos, struct xocl_xgq_vmr_cmd, xgq_cmd_list);
+
+		/* Finding timed out cmds */
+		if (xgq_cmd->xgq_cmd_timeout_jiffies < jiffies) {
+			XGQ_ERR(xgq, "cmd id: %d op: 0x%x timed out. fail this command",
+				xgq_cmd->xgq_cmd_entry.hdr.cid,
+				xgq_cmd->xgq_cmd_entry.hdr.opcode);
+
+			list_del(pos);
+
+			xgq_cmd->xgq_cmd_rcode = -ETIME;
+			complete(&xgq_cmd->xgq_cmd_complete);
+
+			/* First timed out command, dump all device logs */
+			if (count_timeout == 0) {
+				xgq_vmr_log_dump_all(xgq);
+			}
+			count_timeout++;
+		}
+	}
+	mutex_unlock(&xgq->xgq_lock);
+
+	/* If no more outstanding timeouts, we continue to service */
+	return count_timeout > 10;
+}
+
+/*
+ * When driver detach, we need to wait for all commands to drain.
+ * If the one command is already timedout, we can safely recycle it only
+ * after disable interrupts and mark device in bad state, a hot_reset
+ * is needed to recover the device back to normal.
+ */
+static bool xgq_submitted_cmds_empty(struct xocl_xgq_vmr *xgq)
+{
+	mutex_lock(&xgq->xgq_lock);
+	if (list_empty(&xgq->xgq_submitted_cmds)) {
+		mutex_unlock(&xgq->xgq_lock);
+		return true;
+	}
+	mutex_unlock(&xgq->xgq_lock);
+	
+	return false;
+}
+
 /*
  * stop service will be called from driver remove or found timeout cmd from health_worker
  * 3 steps to stop the service:
@@ -388,7 +376,7 @@ static void xgq_stop_services(struct xocl_xgq_vmr *xgq)
 	/* wait for all commands to drain */
 	while (xgq_submitted_cmds_empty(xgq) != true) {
 		msleep(XOCL_XGQ_MSLEEP_1S);
-		xgq_submitted_cmds_drain(xgq);
+		xgq_submitted_cmds_check(xgq);
 	}
 }
 
@@ -405,21 +393,15 @@ static int health_worker(void *data)
 	while (!xw->stop) {
 		msleep(XOCL_XGQ_MSLEEP_1S * 10);
 
-		if (xgq_submitted_cmd_check(xgq)) {
-
-			/* If we see timeout cmd first time, dump log into dmesg */
-			if (!xgq->xgq_halted) {
-				xgq_vmr_log_dump_all(xgq);
-			}
-
-			/* then we stop service */
-			xgq_stop_services(xgq);
-		}
-
-		if (kthread_should_stop()) {
+		if (xgq_submitted_cmds_check(xgq))
 			xw->stop = true;
-		}
+
+		if (kthread_should_stop())
+			xw->stop = true;
 	}
+
+	/* then we stop service */
+	xgq_stop_services(xgq);
 
 	return xw->error ? 1 : 0;
 }
@@ -1873,6 +1855,8 @@ static int xgq_vmr_probe(struct platform_device *pdev)
 	return ret;
 
 attach_failed:
+	xgq_vmr_log_dump_all(xgq);
+
 	platform_set_drvdata(pdev, NULL);
 	xocl_drvinst_release(xgq, &hdl);
 	xocl_drvinst_free(hdl);
