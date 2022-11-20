@@ -820,12 +820,16 @@ static void shm_release_data(struct xocl_xgq_vmr *xgq)
 	up(&xgq->xgq_data_sema);
 }
 
-static void memcpy_to_device(struct xocl_xgq_vmr *xgq, u32 offset, const void *data,
+static void memcpy_to_device_64(struct xocl_xgq_vmr *xgq, u32 offset, const void *data,
 	size_t len)
 {
 	void __iomem *dst = xgq->xgq_payload_base + offset;
+	size_t i = 0;
+	uint64_t *val = (uint64_t *)data;
 
-	memcpy_toio(dst, data, len);
+	for (i = 0; i < len / sizeof(uint64_t); i++) {
+		iowrite64(val[i], dst + sizeof(uint64_t) * i);
+	}
 }
 
 static void memcpy_from_device(struct xocl_xgq_vmr *xgq, u32 offset, void *dst,
@@ -886,6 +890,8 @@ static ssize_t xgq_transfer_data(struct xocl_xgq_vmr *xgq, const void *buf,
 	struct xgq_cmd_sq_hdr *hdr = NULL;
 	ssize_t ret = 0;
 	u32 address = 0;
+	u32 address_64_aligned_start = 0;
+	u32 address_64_aligned_end = 0;
 	u32 length = 0;
 	int id = 0;
 
@@ -914,6 +920,12 @@ static ssize_t xgq_transfer_data(struct xocl_xgq_vmr *xgq, const void *buf,
 		goto acquire_failed;
 	}
 
+	/* start -> 64_aligned_start ... 64_aligened_end -> end */
+	address_64_aligned_start = ALIGN_DOWN(address, sizeof(uint64_t));
+	address_64_aligned_end = ALIGN(address + length - 1, sizeof(uint64_t));
+	/* re-caculate useable size */
+	length = address_64_aligned_end - address_64_aligned_start + 1;
+
 	if (length < len) {
 		ret = -EINVAL;
 		XGQ_ERR(xgq, "request %lld is larger than available %d",
@@ -930,7 +942,7 @@ static ssize_t xgq_transfer_data(struct xocl_xgq_vmr *xgq, const void *buf,
 	 * Note: if len == 0, it is PROGRAME_SCFW, no payload to copyin
 	 */
 	if (len > 0)
-		memcpy_to_device(xgq, address, buf, len);
+		memcpy_to_device_64(xgq, address, buf, len);
 	payload->address = address;
 	payload->size = len;
 	payload->addr_type = XGQ_CMD_ADD_TYPE_AP_OFFSET;
