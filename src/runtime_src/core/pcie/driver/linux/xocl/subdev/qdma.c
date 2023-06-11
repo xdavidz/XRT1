@@ -640,6 +640,7 @@ static int user_intr_register(struct platform_device *pdev, u32 intr,
 	qdma->user_msix_table[intr].in_use = true;
 
 	spin_unlock_irqrestore(&qdma->user_msix_table_lock, flags);
+	printk("irq %d is registerred\n", intr);
 
 
 	return 0;

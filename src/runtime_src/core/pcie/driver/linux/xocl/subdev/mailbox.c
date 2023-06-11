@@ -204,7 +204,7 @@
 #include <linux/sched/clock.h>
 #endif
 
-int mailbox_no_intr = 1;
+int mailbox_no_intr = 0;
 module_param(mailbox_no_intr, int, (S_IRUGO|S_IWUSR));
 MODULE_PARM_DESC(mailbox_no_intr,
 	"Disable mailbox interrupt and do timer-driven msg passing");
@@ -2589,6 +2589,7 @@ static int mailbox_enable_intr_mode(struct mailbox *mbx)
 #if PF == MGMTPF
 	ret = xocl_subdev_get_resource(xdev, NODE_MAILBOX_MGMT,
 			IORESOURCE_IRQ, &dyn_res);
+	printk("DZ_ get irq %d\n", dyn_res.start);
 #else
 	ret = xocl_subdev_get_resource(xdev, NODE_MAILBOX_USER,
 			IORESOURCE_IRQ, &dyn_res);
@@ -2603,6 +2604,7 @@ static int mailbox_enable_intr_mode(struct mailbox *mbx)
 	} else
 		res = &dyn_res;
 
+	printk("DZ_ register irq %d\n", res->start);
 	ret = xocl_user_interrupt_reg(xdev, res->start, mailbox_isr, mbx);
 	if (ret) {
 		MBX_WARN(mbx, "failed to add intr handler");

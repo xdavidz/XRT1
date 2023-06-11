@@ -1745,6 +1745,7 @@ int xocl_subdev_create_vsec_devs(xdev_handle_t xdev)
 		 * For now, just hardcode the size which will be reported by
 		 * the device.
 		 */
+		/* This is IORESOURCE_MEM */
 		subdev_info.res[0].start = offset;
 		subdev_info.res[0].end = offset + 0xfff;
 		subdev_info.res[0].name = NODE_XGQ_SQ_BASE;
@@ -1752,6 +1753,12 @@ int xocl_subdev_create_vsec_devs(xdev_handle_t xdev)
 		subdev_info.res[1].start = offset_payload;
 		subdev_info.res[1].end = offset_payload + 0x7ffffff;
 		subdev_info.res[1].name = NODE_XGQ_VMR_PAYLOAD_BASE;
+
+		printk("DZ xgq_vmr here\n");
+		/* This is IORESOURCE_IRQ */
+		subdev_info.res[2].start = 0x0;
+		subdev_info.res[2].end = 0x0;
+		subdev_info.res[2].name = NODE_XGQ_SQ_BASE;
 
 		core->priv.flash_type = FLASH_TYPE_OSPI_XGQ;
 

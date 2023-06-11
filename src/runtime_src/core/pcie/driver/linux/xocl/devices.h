@@ -3101,6 +3101,12 @@ struct xocl_subdev_map {
 	 		.name   = NODE_XGQ_VMR_PAYLOAD_BASE,\
 			.flags  = IORESOURCE_MEM,	\
 		},					\
+		{					\
+			.start	= 0x0,			\
+			.end	= 0x0,			\
+	 		.name   = NODE_XGQ_SQ_BASE,	\
+			.flags  = IORESOURCE_IRQ,	\
+		},					\
 	})
 
 #define XOCL_PRIV_FLASH_XGQ				\

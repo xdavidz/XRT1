@@ -160,8 +160,7 @@ struct xocl_xgq_vmr {
 	bool 			xgq_boot_from_backup;
 	bool 			xgq_flash_default_only;
 	bool 			xgq_flash_to_legacy;
-	u32			xgq_intr_base;
-	u32			xgq_intr_num;
+	u32			xgq_intr_irq;
 	struct list_head	xgq_submitted_cmds;
 	struct completion 	xgq_irq_complete;
 	struct xgq_worker	xgq_complete_worker;
@@ -281,11 +280,13 @@ static int complete_worker(void *data)
 		if (xgq->xgq_polling) {
 			usleep_range(1000, 2000);
 		} else {
+			printk("DZ__ wait for irq complete\n");
 			/* Note: We dont support xgq interrupt yet.
 			 * Ignore commands killed, the health_worker will set
 			 * correct rcode for submitted cmds
 			 */
 			(void) wait_for_completion_killable(&xgq->xgq_irq_complete);
+			printk("DZ__ triggerred for irq complete\n");
 		}
 
 		if (kthread_should_stop()) {
@@ -307,7 +308,7 @@ static bool xgq_submitted_cmd_check(struct xocl_xgq_vmr *xgq)
 		xgq_cmd = list_entry(pos, struct xocl_xgq_vmr_cmd, xgq_cmd_list);
 
 		/* Finding timed out cmds */
-		if (time_after(jiffies, xgq_cmd->xgq_cmd_timeout_jiffies)) {
+		if (time_after(jiffies, (unsigned long)xgq_cmd->xgq_cmd_timeout_jiffies)) {
 			XGQ_ERR(xgq, "cmd id: %d op: 0x%x timed out, hot reset is required!",
 				xgq_cmd->xgq_cmd_entry.hdr.cid,
 				xgq_cmd->xgq_cmd_entry.hdr.opcode);
@@ -330,7 +331,7 @@ static void xgq_submitted_cmds_drain(struct xocl_xgq_vmr *xgq)
 		xgq_cmd = list_entry(pos, struct xocl_xgq_vmr_cmd, xgq_cmd_list);
 
 		/* Finding timed out cmds */
-		if (time_after(jiffies, xgq_cmd->xgq_cmd_timeout_jiffies)) {
+		if (time_after(jiffies, (unsigned long)xgq_cmd->xgq_cmd_timeout_jiffies)) {
 			list_del(pos);
 
 			xgq_cmd->xgq_cmd_rcode = -ETIME;
@@ -685,11 +686,11 @@ static int fini_worker(struct xgq_worker *xw)
 	return ret;
 }
 
-#if 0
-/* TODO: enabe interrupt */
 static irqreturn_t xgq_irq_handler(int irq, void *arg)
 {
 	struct xocl_xgq_vmr *xgq = (struct xocl_xgq_vmr *)arg;
+
+	printk("DZ_ xgq_irq_handler received intr\n");
 
 	if (xgq && !xgq->xgq_polling) {
 		/* clear intr for enabling next intr */
@@ -702,7 +703,6 @@ static irqreturn_t xgq_irq_handler(int irq, void *arg)
 
 	return IRQ_HANDLED;
 }
-#endif
 
 static enum xgq_cmd_opcode opcode[] = {
 	XGQ_CMD_OP_DOWNLOAD_PDI,
@@ -3403,6 +3403,7 @@ static int xgq_vmr_probe(struct platform_device *pdev)
 {
 	struct xocl_xgq_vmr *xgq = NULL;
 	struct resource *res = NULL;
+	xdev_handle_t xdev = xocl_get_xdev(pdev);
 	int ret = 0, i = 0;
 	void *hdl;
 
@@ -3426,7 +3427,7 @@ static int xgq_vmr_probe(struct platform_device *pdev)
 
 	for (res = platform_get_resource(pdev, IORESOURCE_MEM, i); res;
 	    res = platform_get_resource(pdev, IORESOURCE_MEM, ++i)) {
-		XGQ_INFO(xgq, "res : %s %pR", res->name, res);
+		XGQ_INFO(xgq, "mem res : %s %pR", res->name, res);
 		if (!strncmp(res->name, NODE_XGQ_SQ_BASE, strlen(NODE_XGQ_SQ_BASE))) {
 			xgq->xgq_sq_base = ioremap_nocache(res->start,
 				res->end - res->start + 1);
@@ -3437,6 +3438,19 @@ static int xgq_vmr_probe(struct platform_device *pdev)
 				res->end - res->start + 1);
 		}
 	}
+
+	/* get XGQ intr irq */
+	printk("DZ xgq_vmr 1\n");
+	i = 0;
+	for (res = platform_get_resource(pdev, IORESOURCE_IRQ, i); res;
+	     res = platform_get_resource(pdev, IORESOURCE_IRQ, ++i)) {
+	printk("DZ xgq_vmr in %s\n", res->name);
+		XGQ_INFO(xgq, "irq res : %s %pR", res->name, res);
+		if (!strncmp(res->name, NODE_XGQ_SQ_BASE, strlen(NODE_XGQ_SQ_BASE))) {
+			XGQ_INFO(xgq, "xgq irq: %lld", res->start);
+		}
+	}
+	printk("DZ xgq_vmr force irq = 0\n");
 
 	if (!xgq->xgq_sq_base || !xgq->xgq_payload_base) {
 		ret = -EIO;
@@ -3464,22 +3478,18 @@ static int xgq_vmr_probe(struct platform_device *pdev)
 	xgq->xgq_health_worker.xgq_vmr = xgq;
 	init_complete_worker(&xgq->xgq_complete_worker);
 	init_health_worker(&xgq->xgq_health_worker);
-#if 0
-	/*TODO: enable interrupts */
 
-	/* init interrupt vector number based on iores of kdma */
+	/* there is only one irq for mgmt */
 	res = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
 	if (res) {
-		xgq->xgq_intr_base = res->start;
-		xgq->xgq_intr_num = res->end - res->start + 1;
-		xgq->xgq_polling = 0;
+		XGQ_INFO(xgq, "xgq intr irq %lld", res->start);
+		xgq->xgq_intr_irq = res->start;
+		//xgq->xgq_polling = false;
 	}
 
-	for (i = 0; i < xgq->xgq_intr_num; i++) {
-		xocl_user_interrupt_reg(xdev, xgq->xgq_intr_base + i, xgq_irq_handler, xgq);
-		xocl_user_interrupt_config(xdev, xgq->xgq_intr_base + i, true);
-	}
-
+	xocl_user_interrupt_reg(xdev, xgq->xgq_intr_irq, xgq_irq_handler, xgq);
+	xocl_user_interrupt_config(xdev, xgq->xgq_intr_irq, true);
+#if 0
 	if (xgq->xgq_polling)
 		xrt_cu_disable_intr(&xgq->xgq_cu, CU_INTR_DONE);
 	else
