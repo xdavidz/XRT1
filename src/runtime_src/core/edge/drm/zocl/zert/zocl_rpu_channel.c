@@ -56,6 +56,8 @@ struct zocl_rpu_channel {
 	u64 mem_start;
 	size_t mem_size;
 	struct list_head	data_list;
+	char 			*xclbin_blob;
+	size_t			xclbin_size;
 };
 
 static inline void reg_write(void __iomem *base, u64 off, u32 val)
@@ -90,8 +92,55 @@ static struct attribute *zrpu_channel_attrs[] = {
 	NULL,
 };
 
+static ssize_t read_xclbin(struct file *filp, struct kobject *kobj,
+	struct bin_attribute *attr, char *buf, loff_t off, size_t count)
+{
+	struct zocl_rpu_channel *chan =
+		dev_get_drvdata(container_of(kobj, struct device, kobj));
+	unsigned char *blob;
+	size_t size;
+	ssize_t ret = 0;
+
+	if (!chan)
+		return -ENOMEM;
+	
+	blob = chan->xclbin_blob;
+	size = chan->xclbin_size;
+
+	if (!blob || !size)
+		return -ENOMEM;
+
+	if (off >= size)
+		goto out;
+
+	if (off + count > size)
+		count = size - off;
+
+	memcpy(buf, blob + off, count);
+
+	ret = count;
+out:
+	return ret;
+}
+
+static struct bin_attribute xclbin_blob = {
+	.attr = {
+		.name = "xclbin_blob",
+		.mode = 0444
+	},
+	.read = read_xclbin,
+	.write = NULL,
+	.size = 0
+};
+
+static struct bin_attribute *zrpu_channel_bin_attrs[] = {
+	&xclbin_blob,
+	NULL,
+};
+
 static const struct attribute_group zrpu_channel_attrgroup = {
 	.attrs = zrpu_channel_attrs,
+	.bin_attrs = zrpu_channel_bin_attrs,
 };
 
 static const struct of_device_id zocl_rpu_channel_of_match[] = {
@@ -336,6 +385,12 @@ static void zchan_cmd_load_xclbin(struct zocl_rpu_channel *chan, struct xgq_cmd_
 			   total_size, list_empty(&chan->data_list));
 		INIT_LIST_HEAD(&chan->data_list);
 
+		/* cache latest xclbin_blob */
+		vfree(chan->xclbin_blob);
+		chan->xclbin_size = total_size;
+		chan->xclbin_blob = vmalloc(chan->xclbin_size);
+		memcpy(chan->xclbin_blob, total_data, total_size);
+
 		ret = zocl_xclbin_load_pskernel(zocl_get_zdev(), total_data, slot_id);
 		if (ret)
 			zchan_err(chan, "failed to cache xclbin: %d", ret);
@@ -522,6 +577,8 @@ err_intc:
 static int zrpu_channel_remove(struct platform_device *pdev)
 {
 	struct zocl_rpu_channel *chan = platform_get_drvdata(pdev);
+
+	vfree(chan->xclbin_blob);
 
 	if (chan->xgq_hdl)
 		zxgq_fini(chan->xgq_hdl);
