@@ -1,18 +1,6 @@
 /*
- * Copyright (C) 2021, Xilinx Inc - All rights reserved
- * Xilinx Runtime (XRT) Experimental APIs
- *
- * Licensed under the Apache License, Version 2.0 (the "License"). You may
- * not use this file except in compliance with the License. A copy of the
- * License is located at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
- * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
- * License for the specific language governing permissions and limitations
- * under the License.
+ * Copyright (C) 2021-2022 Xilinx, Inc
+ * SPDX-License-Identifier: Apache-2.0
  */
 #ifndef _XRT_MAILBOX_H_
 #define _XRT_MAILBOX_H_
@@ -30,13 +18,13 @@
 
 namespace xrt {
 
-/*!  
+/*!
  * @class mailbox
- * 
+ *
  * @brief
  * xrt::mailbox provides access to the kernel mailbox if any
  *
- * @detail
+ * @details
  * The mailbox extends the API of an xrt::run with mailbox specific
  * APIs to explicitly control mailbox aspects of a kernel.  It is an
  * error to construct a mailbox from a run object or kernel that
@@ -58,13 +46,19 @@ public:
   XCL_DRIVER_DLLESPEC
   explicit
   mailbox(const run& run);
- 
+
   /**
    * read() - Read kernel arguments into mailbox copy
    *
-   * If the kernel is in auto restart mode, then it is paused after
-   * current iteration before copying the kernel arguments.  The
-   * kernel is started again after the arguments are copied.
+   * This function is asynchronous, it requests the kernel to update
+   * the content of the mailbox when it is safe to do so.  If the
+   * kernel is in auto restart mode, then the update is delayed until
+   * beginning of next iteration.  If the kernel is idle, then the
+   * update is immediate.
+   *
+   * The mailbox is busy until the kernel has updated the content.
+   * It is an error to call ``read()`` while the mailbox is busy,
+   * throws std::system_error with std::errc::device_or_resource_busy.
    *
    * This function invalidates any argument data returned through
    * ``get_arg`` function.
@@ -72,18 +66,24 @@ public:
   XCL_DRIVER_DLLESPEC
   void
   read();
- 
+
   /**
    * write() - Write the mailbox copy of kernel arguments to kernel
    *
-   * If the kernel is in auto restart mode, then it is paused after
-   * current iteration before copying the mailbox content.  The
-   * kernel is started again after the arguments are copied.
+   * This function is asynchronous, it requests the kernel to copy
+   * the content of the mailbox when it is safe to do so.  If the
+   * kernel is in auto restart mode, then the copying is delayed until
+   * beginning of next iteration.  If the kernel is idle, then the
+   * copying is immediate.
+   *
+   * The mailbox is busy until the kernel has copied the content.
+   * It is an error to call ``write()`` while the mailbox is busy,
+   * throws std::system_error with std::errc::device_or_resource_busy.
    */
   XCL_DRIVER_DLLESPEC
   void
   write();
- 
+
   /**
    * get_arg() - Returns the mailbox copy of an argument
    *
@@ -96,12 +96,15 @@ public:
    * copy of the data.  It is valid only until the mailbox is updated
    * again.
    *
+   * The function is synchronous and blocks if the mailbox is busy,
+   * per pending ``read()`` or ``write()``.
+   *
    * Subject to deprecation in favor of type safe version.
    */
   XCL_DRIVER_DLLESPEC
   std::pair<const void*, size_t>
   get_arg(int index) const;
-   
+
   /**
    * set_arg() - Set a specific kernel global argument in the mailbox
    *
@@ -112,41 +115,47 @@ public:
    *
    * Use this API to queue up a new kernel argument value that can
    * be written to the kernel using ``write()``.
+   *
+   * The function is synchronous and blocks if the mailbox is busy,
+   * per pending ``read()`` or ``write()``.
    */
   void
   set_arg(int index, xrt::bo& boh)
   {
     set_arg_at_index(index, boh);
   }
- 
+
   /**
-   * set_arg - xrt::bo variant for const lvalue
+   * set_arg() - xrt::bo variant for const lvalue
    */
   void
   set_arg(int index, const xrt::bo& boh)
   {
     set_arg_at_index(index, boh);
   }
- 
+
   /**
-   * set_arg - xrt::bo variant for rvalue
+   * set_arg() - xrt::bo variant for rvalue
    */
   void
   set_arg(int index, xrt::bo&& boh)
   {
     set_arg_at_index(index, boh);
   }
- 
+
   /**
    * set_arg() - Set a specific kernel scalar argument in the mailbox
    *
    * @param index
    *  Index of kernel argument to set
-   * @param arg       
+   * @param arg
    *  The scalar argument value to set.
    *
    * Use this API to queue up a new kernel scalar arguments value that
    * can be written to the kernel using ``write()``.
+   *
+   * The function is synchronous and blocks if the mailbox is busy,
+   * per pending ``read()`` or ``write()``.
    */
   template <typename ArgType>
   void
@@ -155,11 +164,36 @@ public:
     set_arg_at_index(index, &arg, sizeof(arg));
   }
 
+  /**
+   * set_arg - set named argument in the mailbox
+   *
+   * @param argnm
+   *   Name of kernel argument
+   * @param argvalue
+   *   Argument value
+   *
+   * Throws if specified argument name doesn't match kernel
+   * specification. Throws if argument value is incompatible with
+   * specified argument
+   */
+  template <typename ArgType>
+  void
+  set_arg(const std::string& argnm, ArgType&& argvalue)
+  {
+    auto index = get_arg_index(argnm);
+    set_arg(index, std::forward<ArgType>(argvalue));
+  }
+
+
 private:
+  XCL_DRIVER_DLLESPEC
+  int
+  get_arg_index(const std::string& argnm) const;
+
   XCL_DRIVER_DLLESPEC
   void
   set_arg_at_index(int index, const void* value, size_t bytes);
- 
+
   XCL_DRIVER_DLLESPEC
   void
   set_arg_at_index(int index, const xrt::bo&);
@@ -169,4 +203,3 @@ private:
 #endif
 
 #endif
-

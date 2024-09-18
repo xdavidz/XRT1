@@ -24,6 +24,7 @@
 #include "xrt/xrt_bo.h"
 #include "xrt/xrt_device.h"
 #include "xrt/xrt_graph.h"
+#include "xrt/detail/pimpl.h"
 
 #ifdef __cplusplus
 # include <cstdint>
@@ -87,7 +88,98 @@ public:
   void
   reset_array();
 
+  /**
+   * read_aie_mem() - Read AIE tile's memory
+   *
+   * @param context_id
+   *  context id corresponding to AIE tile
+   * @param col
+   *  column number of AIE tile
+   * @param row
+   *  row number of AIE tile
+   * @param offset
+   *  memory offset to be read from
+   * @param size
+   *  number of bytes to be read
+   * @return
+   *  vector of bytes read
+   *
+   * This function reads data from L1/L2 memory of AIE tile within a context
+   * ** This function works only in Admin mode **
+   */
+  XCL_DRIVER_DLLESPEC
+  std::vector<char>
+  read_aie_mem(uint16_t context_id, uint16_t col, uint16_t row, uint32_t offset, uint32_t size) const;
+
+  /**
+   * write_aie_mem() - Write data to AIE tile's memory
+   *
+   * @param context_id
+   *  context id corresponding to AIE tile
+   * @param col
+   *  column number of AIE tile
+   * @param row
+   *  row number of AIE tile
+   * @param offset
+   *  memory offset to write
+   * @param data
+   *  vector of bytes to be written
+   * @return
+   *  number of bytes written
+   *
+   * This function writes data to L1/L2 memory of AIE tile within a context
+   * ** This function works only in Admin mode **
+   */
+  XCL_DRIVER_DLLESPEC
+  size_t
+  write_aie_mem(uint16_t context_id, uint16_t col, uint16_t row, uint32_t offset, const std::vector<char>& data);
+
+  /**
+   * read_aie_reg() - Read AIE Tile's register
+   *
+   * @param context_id
+   *  context id corresponding to AIE tile
+   * @param col
+   *  column number of AIE tile
+   * @param row
+   *  row number of AIE tile
+   * @param reg_addr
+   *  address offset of register
+   * @return
+   *  register value
+   *
+   * This function reads register of AIE tile within a context
+   * ** This function works only in Admin mode **
+   */
+  XCL_DRIVER_DLLESPEC
+  uint32_t
+  read_aie_reg(uint16_t context_id, uint16_t col, uint16_t row, uint32_t reg_addr) const;
+
+  /**
+   * write_aie_reg() - Write AIE Tile's register
+   *
+   * @param context_id
+   *  context id corresponding to AIE tile
+   * @param col
+   *  column number of AIE tile
+   * @param row
+   *  row number of AIE tile
+   * @param reg_addr
+   *  address offset of register
+   * @param reg_val
+   * value to be written to register
+   * @return
+   *  register value
+   *
+   * This function writes to register of AIE tile within a context
+   * ** This function works only in Admin mode **
+   */
+  XCL_DRIVER_DLLESPEC
+  bool
+  write_aie_reg(uint16_t context_id, uint16_t col, uint16_t row, uint32_t reg_addr, uint32_t reg_val);
+
 private:
+  XCL_DRIVER_DLLESPEC
   void
   open_context(access_mode mode);
 };
@@ -95,6 +187,8 @@ private:
 class bo : public xrt::bo
 {
 public:
+  class async_handle_impl;
+
   /**
    * bo() - Constructor BO that is used for AIE GMIO.
    *
@@ -105,6 +199,24 @@ public:
   bo(Args&&... args)
     : xrt::bo(std::forward<Args>(args)...)
   {}
+
+  /**
+   * async() - Async transfer of data between BO and Shim DMA channel.
+   *
+   * @param port
+   *  GMIO port name.
+   * @param dir
+   *  GM to AIE or AIE to GM
+   * @param sz
+   *  Size of data to transfer
+   * @param offset
+   *  Offset within BO
+   *
+   * Asynchronously transfer the buffer contents from BO offset to offset + sz
+   * between GMIO and AIE.
+   */
+  async_handle 
+  async(const std::string& port, xclBOSyncDirection dir, size_t sz, size_t offset);
 
   /**
    * sync() - Transfer data between BO and Shim DMA channel.
@@ -143,7 +255,129 @@ public:
   }
 };
 
+class profiling_impl;
+class profiling : public detail::pimpl<profiling_impl>
+{
+public:
+  
+  /**
+   * @enum profiliing_options - contains the enumerated options for performance
+   *				profiling using PLIO and GMIO objects.
+   *
+   * @var io_total_stream_running_to_idle_cycles
+   *   Total clock cycles in between the stream running event and the stream 
+   *   idle event of the stream port in the interface tile.
+   * @var io_stream_start_to_bytes_transferred_cycles
+   *   The clock cycles in between the first stream running event to the event that
+   *   the specified bytes are transferred through the stream port in the interface tile.
+   * @var io_stream_start_difference_cycles
+   *   The clock cycles elapsed between the first stream running events of
+   *   the two platform I/O objects.
+   * @var io_stream_running_event_count
+   *   Number of stream running events 
+   *   
+   * Please refer UG1079 for more details.
+   */
+  enum class profiling_option : int 
+  { 
+    io_total_stream_running_to_idle_cycles = 0, 
+    io_stream_start_to_bytes_transferred_cycles = 1,
+    io_stream_start_difference_cycles = 2,
+    io_stream_running_event_count = 3 
+  };
+
+  profiling() = default;
+
+  /**
+   * event() - Constructor from a device
+   *
+   * @param device
+   *  The device on which the profiling should start
+   *
+   */
+  explicit
+  profiling(const xrt::device& device);
+
+  /**
+   * start() - Start AIE performance profiling
+   *
+   * @param option
+   *  Profiling option
+   * @param port1_name
+   *  PLIO/GMIO port 1 name.
+   * @param port2_name
+   *  PLIO/GMIO port 2 name.
+   * @param value
+   *  The number of bytes to trigger the profiling event.
+   *
+   * Please refer UG1079 for more details.
+   *
+   * This function configures the performance counters in AI Engine by given
+   * port names and value. The port names and value will have different
+   * meanings on different options.
+   */
+  int 
+  start(profiling_option option, const std::string& port1_name, const std::string& port2_name, uint32_t value) const;
+
+  /**
+   * read() - Read the current performance counter value
+   *          associated with the profiling handle
+   */
+  uint64_t
+  read() const;
+
+  /**
+   * stop() - Stop the current performance profiling
+   *          associated with the profiling handle and
+   *          release the corresponding hardware resources.
+   */
+  void
+  stop() const;
+};
+
 }} // aie, xrt
+
+/**
+ * xrtAIEStartProfiling() - Start AIE performance profiling
+ *
+ * @handle:          Handle to the device
+ * @option:          Profiling option.
+ * @port1Name:       PLIO/GMIO port 1 name
+ * @port2Name:       PLIO/GMIO port 2 name
+ * @value:           The number of bytes to trigger the profiling event
+ *
+ * Return:         An integer profiling handle on success,
+ *                 or appropriate error number.
+ *
+ * This function configures the performance counters in AI Engine by given
+ * port names and value. The port names and value will have different
+ * meanings on different options.
+ */
+int
+xrtAIEStartProfiling(xrtDeviceHandle handle, int option, const char *port1Name, const char *port2Name, uint32_t value);
+
+/**
+ * xrtAIEReadProfiling() - Read the current performance counter value
+ *                         associated with the profiling handle.
+ *
+ * @pHandle:         Profiling handle.
+ *
+ * Return:         The performance counter value, or appropriate error number.
+ */
+uint64_t
+xrtAIEReadProfiling(xrtDeviceHandle /*handle*/, int pHandle);
+
+/**
+ * xrtAIEStopProfiling() - Stop the current performance profiling
+ *                         associated with the profiling handle and
+ *                         release the corresponding hardware resources.
+ *
+ * @pHandle:         Profiling handle.
+ *
+ * Return:         0 on success, or appropriate error number.
+ */
+void
+xrtAIEStopProfiling(xrtDeviceHandle /*handle*/, int pHandle);
 
 /// @cond
 extern "C" {
@@ -151,7 +385,7 @@ extern "C" {
 #endif
 
 /**
- * xrtAIEOpen() - Open a device with AIE and obtain its handle
+ * xrtAIEDeviceOpen() - Open a device with AIE and obtain its handle
  *
  * @param index
  *   Device index
@@ -179,7 +413,7 @@ xrtDeviceHandle
 xrtAIEDeviceOpen(unsigned int index);
 
 /**
- * xrtAIEOpenExclusive() - Open a device with AIE and obtain its handle
+ * xrtAIEDeviceOpenExclusive() - Open a device with AIE and obtain its handle
  *
  * @index:          Device index
  * Return:          0 on success, or appropriate error number.
@@ -190,7 +424,7 @@ xrtDeviceHandle
 xrtAIEDeviceOpenExclusive(unsigned int index);
 
 /**
- * xrtAIEOpenShared() - Open a device with AIE and obtain its handle
+ * xrtAIEDeviceOpenShared() - Open a device with AIE and obtain its handle
  *
  * @index:          Device index
  * Return:          0 on success, or appropriate error number.
@@ -235,7 +469,6 @@ xrtSyncBOAIE(xrtDeviceHandle handle, xrtBufferHandle bohdl, const char *gmioName
 /* Provide this API for backward compatibility. */
 int
 xrtResetAIEArray(xrtDeviceHandle handle);
-
 /// @endcond
 
 #ifdef __cplusplus

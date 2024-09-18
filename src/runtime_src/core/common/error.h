@@ -34,7 +34,7 @@ public:
   system_error(int ec, const std::error_category& cat, const std::string& what = "")
     : std::system_error(std::abs(ec), cat, what)
   {}
-  
+
   system_error(std::errc ec, const std::error_category& cat, const std::string& what = "")
     : std::system_error(static_cast<int>(ec), cat, what)
   {}
@@ -99,7 +99,7 @@ public:
   {}
 
   explicit
-    error(std::errc ec, const std::string& what = "")
+  error(std::errc ec, const std::string& what = "")
     : generic_error(ec, what)
   {}
 
@@ -111,15 +111,15 @@ public:
 
 // Internal unexpected error
 using internal_error = std::runtime_error;
- 
+
 
 XRT_CORE_COMMON_EXPORT
 void
-send_exception_message(const char* msg, const char* tag="XRT");
+send_exception_message(const char* msg, const char* tag="XRT") noexcept;
 
 XRT_CORE_COMMON_EXPORT
 void
-send_exception_message(const std::string& msg, const char* tag="XRT");
+send_exception_message(const std::string& msg, const char* tag="XRT") noexcept;
 
 } // xrt_core
 

@@ -19,10 +19,8 @@
 #include "debug.h"
 
 #include "xocl/xclbin/xclbin.h"
-#include "core/common/api/exec.h"
+#include "core/common/api/hw_queue.h"
 
-#include <boost/filesystem/operations.hpp>
-#include <boost/filesystem/path.hpp>
 #include <fstream>
 #include <iostream>
 #include <cassert>
@@ -34,18 +32,6 @@
 namespace {
 
 static xocl::platform* g_platform = nullptr;
-
-static const char*
-value_or_empty(const char* value)
-{
-  return value ? value : "";
-}
-
-static std::string
-get_env(const char* env)
-{
-  return value_or_empty(std::getenv(env));
-}
 
 } // namespace
 
@@ -121,7 +107,7 @@ platform::
     // static global destruction
     // synchronize with execution monitor thread which
     // may be in the process of notifying completed events
-    xrt_core::exec::stop();
+    xrt_core::hw_queue::stop();
     g_platform = nullptr;
   }
   catch (const std::exception& ex) {
@@ -173,20 +159,6 @@ unsigned int
 get_num_platforms()
 {
   return g_platform ? 1 : 0;
-}
-
-std::string
-get_xilinx_opencl()
-{
-  static std::string xilinx_opencl = get_env("XILINX_OPENCL");
-  return xilinx_opencl;
-}
-
-std::string
-get_xilinx_sdx()
-{
-  static std::string xilinx_sdx = get_env("XILINX_SDX");
-  return xilinx_sdx;
 }
 
 } // xocl

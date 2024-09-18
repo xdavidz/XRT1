@@ -1,5 +1,6 @@
 /**
- * Copyright (C) 2016-2020 Xilinx, Inc
+ * Copyright (C) 2016-2022 Xilinx, Inc
+ * Copyright (C) 2022-2024 Advanced Micro Devices, Inc. - All rights reserved
  *
  * Licensed under the Apache License, Version 2.0 (the "License"). You may
  * not use this file except in compliance with the License. A copy of the
@@ -22,13 +23,13 @@
 #include <tuple>
 
 #include "xdp/profile/plugin/vp_base/vp_base_plugin.h"
-#include "xdp/profile/device/device_intf.h"
-#include "xdp/profile/device/device_trace_offload.h"
+#include "xdp/profile/device/pl_device_intf.h"
+#include "xdp/profile/device/pl_device_trace_offload.h"
 
 namespace xdp {
 
   // Forward declarations
-  class TraceLoggerCreatingDeviceEvents ;
+  class PLDeviceTraceLogger;
 
   // This plugin should be completely agnostic of what the host code profiling
   //  plugin is.  So, this should work with HAL profiling, OpenCL profiling, 
@@ -40,44 +41,42 @@ namespace xdp {
   // This is the base of all plugins that perform device offload.  It 
   //  handles common functionality for programs that come from HAL or
   //  OpenCL.
-  class DeviceOffloadPlugin : public XDPPlugin
+  class PLDeviceOffloadPlugin : public XDPPlugin
   {
   private:
     // These are the continuous offload configuration parameters as read
     //  from xrt.ini.
+    bool device_trace;
     bool continuous_trace ;
     unsigned int trace_buffer_offload_interval_ms ;
     bool m_enable_circular_buffer = false;
 
   protected:
-    // This is used to determine if each plugin instance
-    //  has access to the device
-    bool active ;
-
     // Each device offload plugin is responsible for offloading
     //  information from all devices.  This holds all the objects
     //  responsible for offloading data from all devices.
-    typedef std::tuple<DeviceTraceOffload*, 
-                       TraceLoggerCreatingDeviceEvents*,
-                       DeviceIntf*> DeviceData ;
+    typedef std::tuple<PLDeviceTraceOffload*,
+                       PLDeviceTraceLogger*,
+                       PLDeviceIntf*> DeviceData ;
 
     std::map<uint64_t, DeviceData> offloaders;
 
-    XDP_EXPORT void addDevice(const std::string& sysfsPath) ;
-    XDP_EXPORT void configureDataflow(uint64_t deviceId, DeviceIntf* devInterface) ;
-    XDP_EXPORT void configureFa(uint64_t deviceId, DeviceIntf* devInterface) ;
-    XDP_EXPORT void configureCtx(uint64_t deviceId, DeviceIntf* devInterface) ;
-    XDP_EXPORT void addOffloader(uint64_t deviceId, DeviceIntf* devInterface) ;
-    XDP_EXPORT void configureTraceIP(DeviceIntf* devInterface) ;
-    XDP_EXPORT void startContinuousThreads(uint64_t deviceId) ;
+    void addDevice(const std::string& sysfsPath) ;
+    void configureDataflow(uint64_t deviceId, PLDeviceIntf* devInterface) ;
+    void configureFa(uint64_t deviceId, PLDeviceIntf* devInterface) ;
+    void configureCtx(uint64_t deviceId, PLDeviceIntf* devInterface) ;
+    void addOffloader(uint64_t deviceId, PLDeviceIntf* devInterface) ;
+    void configureTraceIP(PLDeviceIntf* devInterface) ;
+    void startContinuousThreads(uint64_t deviceId) ;
 
-    XDP_EXPORT void readCounters() ;
-    XDP_EXPORT virtual void readTrace() = 0 ;
-    XDP_EXPORT void checkTraceBufferFullness(DeviceTraceOffload* offloader, uint64_t deviceId) ;
+    void readCounters() ;
+    virtual void readTrace() = 0 ;
+    void checkTraceBufferFullness(PLDeviceTraceOffload* offloader, uint64_t deviceId) ;
+    bool flushTraceOffloader(PLDeviceTraceOffload* offloader);
 
   public:
-    XDP_EXPORT DeviceOffloadPlugin() ;
-    XDP_EXPORT ~DeviceOffloadPlugin() ;
+    PLDeviceOffloadPlugin() ;
+    virtual ~PLDeviceOffloadPlugin() = default ;
 
     virtual void writeAll(bool openNewFiles) ;
 

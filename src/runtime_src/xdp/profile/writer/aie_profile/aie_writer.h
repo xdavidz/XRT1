@@ -27,13 +27,17 @@ namespace xdp {
   public:
     AIEProfilingWriter(const char* fileName, const char* deviceName, 
                        uint64_t deviceIndex);
-    ~AIEProfilingWriter();
+    ~AIEProfilingWriter() = default;
 
-    virtual bool write(bool openNewFile);
+    virtual void writerDataColumnHeader();
+    void writeHeader();
+    void writeMetricSettings();
+    virtual bool write(bool openNewFile = true);
     
   private:
     std::string mDeviceName;
     uint64_t mDeviceIndex;
+    bool mHeaderWritten;
   };
 
 } // end namespace xdp

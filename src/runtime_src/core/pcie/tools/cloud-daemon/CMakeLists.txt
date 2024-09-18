@@ -22,8 +22,6 @@ target_link_libraries(mpd
   xrt_core_static
   xrt_coreutil_static
   pthread
-  ${Boost_FILESYSTEM_LIBRARY}
-  ${Boost_SYSTEM_LIBRARY}
   uuid
   dl
   udev
@@ -47,8 +45,6 @@ target_link_libraries(msd
   xrt_core_static
   xrt_coreutil_static
   pthread
-  ${Boost_FILESYSTEM_LIBRARY}
-  ${Boost_SYSTEM_LIBRARY}
   uuid
   dl
   )

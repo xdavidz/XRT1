@@ -1,5 +1,6 @@
 /**
  * Copyright (C) 2016-2020 Xilinx, Inc
+ * Copyright (C) 2023-2024 Advanced Micro Devices, Inc. - All rights reserved
  *
  * Licensed under the Apache License, Version 2.0 (the "License"). You may
  * not use this file except in compliance with the License. A copy of the
@@ -17,6 +18,7 @@
 #ifndef VP_WRITER_DOT_H
 #define VP_WRITER_DOT_H
 
+#include <cstdint>
 #include <fstream>
 #include <string>
 
@@ -25,13 +27,19 @@
 namespace xdp {
 
   // Forward declarations
-  class VPDatabase ;
-  class DeviceIntf ;
+  class VPDatabase;
+  class PLDeviceIntf;
 
   // The base class for all writers, including summaries, traces, 
   //  and any others.
   class VPWriter 
   {
+#ifdef _WIN32
+  static constexpr bool profDirDefault = false;
+#else
+  static constexpr bool profDirDefault = true;
+#endif
+
   private:
     // The base name of all files created by this writer
     std::string basename ;
@@ -41,8 +49,9 @@ namespace xdp {
 
     // The directory where all the files will be dumped
     std::string directory ;
+  protected:
     char separator ;
-
+  private:
     // The number of files created by this writer (in continuous offload)
     uint32_t fileNum ;
     static bool warnFileNum;
@@ -57,20 +66,23 @@ namespace xdp {
     VPWriter() = delete ;
 
     inline const char* getRawBasename() { return basename.c_str() ; } 
-    XDP_EXPORT virtual void switchFiles() ;
-    XDP_EXPORT virtual void refreshFile() ;
+    XDP_CORE_EXPORT virtual void switchFiles() ;
+    XDP_CORE_EXPORT virtual void refreshFile() ;
   public:
-    XDP_EXPORT VPWriter(const char* filename) ;
-    XDP_EXPORT VPWriter(const char* filename, VPDatabase* inst, bool useDir = true) ;
-    XDP_EXPORT virtual ~VPWriter() ;
+    XDP_CORE_EXPORT VPWriter(const char* filename) ;
+    XDP_CORE_EXPORT VPWriter(const char* filename, VPDatabase* inst,
+                             bool useDir = profDirDefault);
 
-    XDP_EXPORT virtual std::string getcurrentFileName() ;
+    XDP_CORE_EXPORT virtual ~VPWriter() ;
+
+    XDP_CORE_EXPORT virtual std::string getcurrentFileName() ;
 
     virtual bool isRunSummaryWriter() { return false ; }
     // Return false to indicate no data was written
     virtual bool write(bool openNewFile = true) = 0 ;
+    virtual bool write(bool /*openNewFile*/, void* /*handle*/) {return false;}
     virtual bool isDeviceWriter() { return false ; } 
-    virtual DeviceIntf* device() { return nullptr ; } 
+    virtual PLDeviceIntf* device() { return nullptr ; }
     virtual bool isSameDevice(void* /*handle*/) { return false ; }
 
     virtual std::string getDirectory() { return directory ; }

@@ -81,6 +81,10 @@ kernels without the specified features.
 #include "experimental/xrt_ini.h"
 #include "experimental/xrt_mailbox.h"
 
+#ifdef _WIN32
+# pragma warning( disable : 4996 )
+#endif
+
 using value_type = std::uint32_t;
 
 static size_t data_size = 8 * 1024 * 1024;
@@ -118,7 +122,7 @@ adjust_for_emulation()
 {
   if (!is_hw_emulation() && !is_sw_emulation())
     return;
-  
+
   data_size = 4096;
   data_size_bytes = data_size * sizeof(int);
 }
@@ -142,8 +146,8 @@ run(const xrt::device& device, const xrt::uuid& uuid, unsigned int iter)
 
   // incr(nullptr, nullptr, adder1, adder2)
   xrt::kernel incr(device, uuid, "krnl_stream_vdatamover");
-  int adder1 = 0;
-  int adder2 = 0;
+  int adder1 = 20;  // arbitrarily chosen to be different from 0
+  int adder2 = 10;  // arbitrarily chosen to be different from 0
 
   // create run objects for re-use in loop
   xrt::run add_run(add);
