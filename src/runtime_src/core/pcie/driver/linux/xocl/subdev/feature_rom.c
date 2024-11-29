@@ -20,6 +20,7 @@
 #include "xclfeatures.h"
 #include "flash_xrt_data.h"
 #include "../xocl_drv.h"
+#include "../xocl_vmgmt_drv.h"
 
 #define	MAGIC_NUM	0x786e6c78
 struct feature_rom {
@@ -297,12 +298,12 @@ static bool verify_timestamp(struct platform_device *pdev, u64 timestamp)
 	rom = platform_get_drvdata(pdev);
 	BUG_ON(!rom);
 
-	xocl_dbg(&pdev->dev, "Shell timestamp: 0x%llx",
+	dev_dbg(&pdev->dev, "Shell timestamp: 0x%llx",
 		rom->header.TimeSinceEpoch);
-	xocl_dbg(&pdev->dev, "Verify timestamp: 0x%llx", timestamp);
+	dev_dbg(&pdev->dev, "Verify timestamp: 0x%llx", timestamp);
 
 	if (strlen(rom->uuid) > 0) {
-		xocl_dbg(&pdev->dev, "2RP platform, skip timestamp check");
+		dev_dbg(&pdev->dev, "2RP platform, skip timestamp check");
 		return true;
 	}
 
@@ -356,32 +357,32 @@ static bool is_valid_firmware(struct platform_device *pdev,
 	u64 rts = rom->header.TimeSinceEpoch;
 
 	if (memcmp(fw_buf, ICAP_XCLBIN_V2, sizeof(ICAP_XCLBIN_V2)) != 0) {
-		xocl_err(&pdev->dev, "unknown fw format");
+		dev_err(&pdev->dev, "unknown fw format");
 		return false;
 	}
 
 	if (axlflen > fw_len) {
-		xocl_err(&pdev->dev, "truncated fw, length: %ld, expect: %ld",
+		dev_err(&pdev->dev, "truncated fw, length: %ld, expect: %ld",
 			fw_len, axlflen);
 		return false;
 	}
 
 	if (xocl_xrt_version_check(xocl_get_xdev(pdev), axlf, true)) {
-		xocl_err(&pdev->dev, "fw version is not supported by xrt");
+		dev_err(&pdev->dev, "fw version is not supported by xrt");
 		return false;
 	}
 
 	if (is_multi_rp(rom)) {
 		const char *uuid = get_uuid_from_firmware(pdev, axlf);
 		if (uuid == NULL || strcmp(rom->uuid, uuid) != 0) {
-			xocl_err(&pdev->dev, "bad fw UUID: %s, expect: %s",
+			dev_err(&pdev->dev, "bad fw UUID: %s, expect: %s",
 				uuid ? uuid : "<none>", rom->uuid);
 			return false;
 		}
 	}
 
 	if (ts != rts) {
-		xocl_err(&pdev->dev,
+		dev_err(&pdev->dev,
 			"bad fw timestamp: 0x%llx, exptect: 0x%llx", ts, rts);
 		return false;
 	}
@@ -411,15 +412,15 @@ static int load_firmware_from_flash(struct platform_device *pdev,
 	char *buf = NULL;
 	struct flash_data_ident id = { {0} };
 
-	xocl_dbg(&pdev->dev, "try loading fw from flash");
+	dev_dbg(&pdev->dev, "try loading fw from flash");
 
 	ret = xocl_flash_get_size(xdev, &flash_size);
 	if (ret == -ENODEV) {
-		xocl_dbg(&pdev->dev,
+		dev_dbg(&pdev->dev,
 			"no flash subdev");
 		return ret;
 	} else if (flash_size == 0) {
-		xocl_err(&pdev->dev,
+		dev_err(&pdev->dev,
 			"failed to get flash size");
 		return -EINVAL;
 	}
@@ -427,7 +428,7 @@ static int load_firmware_from_flash(struct platform_device *pdev,
 	ret = xocl_flash_read(xdev, (char *)&header, sizeof(header),
 		flash_size - sizeof(header));
 	if (ret) {
-		xocl_err(&pdev->dev,
+		dev_err(&pdev->dev,
 			"failed to read meta data header from flash: %d", ret);
 		return ret;
 	}
@@ -437,12 +438,12 @@ static int load_firmware_from_flash(struct platform_device *pdev,
 	if (strncmp(id.fdi_magic, XRT_DATA_MAGIC, magiclen)) {
 		char tmp[sizeof(id.fdi_magic) + 1] = { 0 };
 		memcpy(tmp, id.fdi_magic, magiclen);
-		xocl_dbg(&pdev->dev, "ignore meta data, bad magic: %s", tmp);
+		dev_dbg(&pdev->dev, "ignore meta data, bad magic: %s", tmp);
 		return -ENOENT;
 	}
 
 	if (id.fdi_version != 0) {
-		xocl_dbg(&pdev->dev,
+		dev_dbg(&pdev->dev,
 			"flash meta data version is not supported: %d",
 			id.fdi_version);
 		return -EOPNOTSUPP;
@@ -455,15 +456,15 @@ static int load_firmware_from_flash(struct platform_device *pdev,
 	ret = xocl_flash_read(xdev, buf, header.fdh_data_len,
 		header.fdh_data_offset);
 	if (ret) {
-		xocl_err(&pdev->dev,
+		dev_err(&pdev->dev,
 			"failed to read meta data from flash: %d", ret);
 	} else if (flash_xrt_data_get_parity32(buf, header.fdh_data_len) ^
 		header.fdh_data_parity) {
-		xocl_err(&pdev->dev, "meta data is corrupted");
+		dev_err(&pdev->dev, "meta data is corrupted");
 		ret = -EINVAL;
 	}
 
-	xocl_dbg(&pdev->dev, "found meta data of %d bytes @0x%x",
+	dev_dbg(&pdev->dev, "found meta data of %d bytes @0x%x",
 		header.fdh_data_len, header.fdh_data_offset);
 	*fw_buf = buf;
 	*fw_len = header.fdh_data_len;
@@ -512,13 +513,13 @@ static int load_firmware_from_disk(struct platform_device *pdev, char **fw_buf,
 			vendor_fw_dir, vendor, deviceid, subdevice, timestamp, suffix);
 	}
 
-	xocl_dbg(&pdev->dev, "try loading fw: %s", fw_name);
+	dev_dbg(&pdev->dev, "try loading fw: %s", fw_name);
 	err = xocl_request_firmware(&pcidev->dev, fw_name, fw_buf, fw_len);
 	if (err && !is_multi_rp(rom)) {
 		snprintf(fw_name, sizeof(fw_name),
 			"%s/%04x-%04x-%04x-%016llx.%s",
 			vendor_fw_dir, vendor, (deviceid + 1), subdevice, timestamp, suffix);
-		xocl_dbg(&pdev->dev, "try loading fw: %s", fw_name);
+		dev_dbg(&pdev->dev, "try loading fw: %s", fw_name);
 		err = xocl_request_firmware(&pcidev->dev, fw_name, fw_buf, fw_len);
 	}
 
@@ -551,7 +552,7 @@ static int load_firmware(struct platform_device *pdev, char **fw, size_t *len)
 	if (ret)
 		ret = load_firmware_from_flash(pdev, &buf, &size);
 	if (ret) {
-		xocl_err(&pdev->dev, "can't load firmware, ret:%d, give up", ret);
+		dev_err(&pdev->dev, "can't load firmware, ret:%d, give up", ret);
 		return ret;
 	}
 
@@ -675,7 +676,7 @@ static int get_header_from_dtb(struct feature_rom *rom)
 	    i -= 4, j += 8) {
 		sprintf(&rom->uuid[j], "%08x", ioread32(rom->base + i));
 	}
-	xocl_dbg(&rom->pdev->dev, "UUID %s", rom->uuid);
+	dev_dbg(&rom->pdev->dev, "UUID %s", rom->uuid);
 
 	return init_rom_by_dtb(rom);
 }
@@ -726,7 +727,7 @@ static int get_header_from_iomem(struct feature_rom *rom)
 		vendor = XOCL_PL_TO_PCI_DEV(pdev)->vendor;
 		did = XOCL_PL_TO_PCI_DEV(pdev)->device;
 		if (vendor == 0x1d0f && (did == 0x1042 || did == 0xf010 || did == 0xf011 || did == 0x9048 || did == 0x9248)) {
-			xocl_dbg(&pdev->dev,
+			dev_dbg(&pdev->dev,
 				"Found AWS VU9P Device without featureROM");
 			/*
  			 * This is AWS device. Fill the FeatureROM struct.
@@ -766,7 +767,7 @@ static int get_header_from_iomem(struct feature_rom *rom)
 
 			xocl_info(&pdev->dev, "Enabling AWS dynamic 5.0 Shell");
 		} else {
-			xocl_err(&pdev->dev, "Magic number does not match, "
+			dev_err(&pdev->dev, "Magic number does not match, "
 			"actual 0x%x, expected 0x%x", val, MAGIC_NUM);
 			ret = -ENODEV;
 			goto failed;
@@ -785,6 +786,7 @@ static int feature_rom_probe(struct platform_device *pdev)
 	struct resource *res;
 	char	*tmp;
 	int	ret;
+	xdev_handle_t xdev = xocl_get_xdev(pdev);
 
 	rom = devm_kzalloc(&pdev->dev, sizeof(*rom), GFP_KERNEL);
 	if (!rom)
@@ -793,9 +795,17 @@ static int feature_rom_probe(struct platform_device *pdev)
 	rom->pdev =  pdev;
 	platform_set_drvdata(pdev, rom);
 
+	if (XOCL_VMGMT_MBX_PROTOCOL_VERSION(xdev)) {
+		struct FeatureRomHeader *data;
+
+		data = dev_get_platdata(&pdev->dev);
+		memcpy(&rom->header, data, sizeof(*data));
+		goto skip_get_header;
+	}
+
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (res == NULL) {
-		xocl_dbg(&pdev->dev, "Get header from VSEC");
+		dev_dbg(&pdev->dev, "Get header from VSEC");
 		ret = get_header_from_vsec(rom);
 		if (ret)
 			(void)get_header_from_peer(rom);
@@ -803,7 +813,7 @@ static int feature_rom_probe(struct platform_device *pdev)
 		rom->base = ioremap_nocache(res->start, res->end - res->start + 1);
 		if (!rom->base) {
 			ret = -EIO;
-			xocl_err(&pdev->dev, "Map iomem failed");
+			dev_err(&pdev->dev, "Map iomem failed");
 			goto failed;
 		}
 
@@ -813,6 +823,8 @@ static int feature_rom_probe(struct platform_device *pdev)
 		} else
 			(void)get_header_from_iomem(rom);
 	}
+
+skip_get_header:
 
 	if (strstr(rom->header.VBNVName, "-xare")) {
 		/*
@@ -840,24 +852,24 @@ static int feature_rom_probe(struct platform_device *pdev)
 
 	ret = sysfs_create_group(&pdev->dev.kobj, &rom_attr_group);
 	if (ret) {
-		xocl_err(&pdev->dev, "create sysfs failed");
+		dev_err(&pdev->dev, "create sysfs failed");
 		goto failed;
 	}
 
 	tmp = rom->header.EntryPointString;
-	xocl_dbg(&pdev->dev, "ROM magic : %c%c%c%c",
+	dev_dbg(&pdev->dev, "ROM magic : %c%c%c%c",
 		tmp[0], tmp[1], tmp[2], tmp[3]);
-	xocl_dbg(&pdev->dev, "VBNV: %s", rom->header.VBNVName);
-	xocl_dbg(&pdev->dev, "DDR channel count : %d",
+	dev_dbg(&pdev->dev, "VBNV: %s", rom->header.VBNVName);
+	dev_dbg(&pdev->dev, "DDR channel count : %d",
 		rom->header.DDRChannelCount);
-	xocl_dbg(&pdev->dev, "DDR channel size: %d GB",
+	dev_dbg(&pdev->dev, "DDR channel size: %d GB",
 		rom->header.DDRChannelSize);
-	xocl_dbg(&pdev->dev, "Major Version: %d", rom->header.MajorVersion);
-	xocl_dbg(&pdev->dev, "Minor Version: %d", rom->header.MinorVersion);
-	xocl_dbg(&pdev->dev, "IPBuildID: %u", rom->header.IPBuildID);
-	xocl_dbg(&pdev->dev, "TimeSinceEpoch: %llx",
+	dev_dbg(&pdev->dev, "Major Version: %d", rom->header.MajorVersion);
+	dev_dbg(&pdev->dev, "Minor Version: %d", rom->header.MinorVersion);
+	dev_dbg(&pdev->dev, "IPBuildID: %u", rom->header.IPBuildID);
+	dev_dbg(&pdev->dev, "TimeSinceEpoch: %llx",
 		rom->header.TimeSinceEpoch);
-	xocl_dbg(&pdev->dev, "FeatureBitMap: %llx", rom->header.FeatureBitMap);
+	dev_dbg(&pdev->dev, "FeatureBitMap: %llx", rom->header.FeatureBitMap);
 
 	return 0;
 
@@ -873,10 +885,10 @@ static int feature_rom_remove(struct platform_device *pdev)
 {
 	struct feature_rom *rom;
 
-	xocl_dbg(&pdev->dev, "Remove feature rom");
+	dev_dbg(&pdev->dev, "Remove feature rom");
 	rom = platform_get_drvdata(pdev);
 	if (!rom) {
-		xocl_err(&pdev->dev, "driver data is NULL");
+		dev_err(&pdev->dev, "driver data is NULL");
 		return -EINVAL;
 	}
 	if (rom->base)

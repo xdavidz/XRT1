@@ -1000,6 +1000,7 @@ void xclmgmt_mailbox_srv(void *arg, void *data, size_t len,
 			break;
 		}
 
+
 		if (payload_len < sizeof(*mb_kaddr)) {
 			mgmt_err(lro, "peer request dropped, wrong size\n");
 			break;

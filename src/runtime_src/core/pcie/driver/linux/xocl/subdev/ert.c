@@ -19,6 +19,7 @@
 #include <linux/string.h>
 #include <ert.h>
 #include "../xocl_drv.h"
+#include "../xocl_vmgmt_drv.h"
 #include "mgmt-ioctl.h"
 
 #define MAX_ERT_RETRY			10
@@ -140,8 +141,13 @@ static int load_image(struct xocl_ert *ert)
 
 	xdev_hdl = xocl_get_xdev(ert->pdev);
 
-	/* load ERT Image */
-	if (xocl_mb_sched_on(xdev_hdl) && ert->sche_binary_length) {
+	/* load ERT Image, if there is vmgmt driver then use vmgmt resources */
+	if (XOCL_VMGMT_MBX_PROTOCOL_VERSION(xdev_hdl))
+		ret = xocl_vmgmt_mb_sched_on(xdev_hdl);
+	else
+		ret = xocl_mb_sched_on(xdev_hdl);
+
+	if (ret && ert->sche_binary_length) {
 		xocl_info(&ert->pdev->dev, "Copying scheduler image len %d",
 			ert->sche_binary_length);
 		COPY_SCHE(ert, ert->sche_binary, ert->sche_binary_length);
@@ -401,7 +407,7 @@ static int ert_probe(struct platform_device *pdev)
 	struct xocl_ert *ert;
 	struct resource *res;
 	void *xdev_hdl;
-	int err, i;
+	int err, i, ret = 0;
 
 	ert = xocl_drvinst_alloc(&pdev->dev, sizeof(*ert));
 	if (!ert) {
@@ -439,7 +445,14 @@ static int ert_probe(struct platform_device *pdev)
 	ert->reset_addr = ioremap_nocache(res->start, res->end - res->start + 1);
 
 	xdev_hdl = xocl_get_xdev(pdev);
-	if (!xocl_mb_sched_on(xdev_hdl)) {
+
+	/* load ERT Image, if there is vmgmt driver then use vmgmt resources */
+	if (XOCL_VMGMT_MBX_PROTOCOL_VERSION(xdev_hdl))
+		ret = xocl_vmgmt_mb_sched_on(xdev_hdl);
+	else
+		ret = xocl_mb_sched_on(xdev_hdl);
+
+	if (!ret) {
 		xocl_info(&pdev->dev, "Microblaze is not supported.");
 		return 0;
 	}
