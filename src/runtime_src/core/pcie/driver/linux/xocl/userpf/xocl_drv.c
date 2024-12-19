@@ -45,6 +45,9 @@
 
 #define MAX_SB_APERTURES		256
 
+extern unsigned char __dtb_versal_begin[];
+extern unsigned char __dtb_versal_end[];
+
 static const struct pci_device_id pciidlist[] = {
 	XOCL_USER_XDMA_PCI_IDS,
 	{ 0, }
@@ -822,6 +825,26 @@ uint64_t xocl_get_data(struct xocl_dev *xdev, enum data_kind kind)
 	return ret;
 }
 
+static int xocl_vmgmt_get_fdt(struct xocl_dev *xdev, char **blobp, int *len)
+{
+	const void *dtb_data = __dtb_versal_begin;
+	size_t dtb_size = __dtb_versal_end - __dtb_versal_begin;
+	if (!dtb_size) {
+		userpf_info(xdev, "dtb_size %zu", dtb_size);
+		return -EINVAL;
+	}	
+
+	char *blob = vzalloc(dtb_size);
+	if (!blob)
+		return -ENOMEM;
+
+	memcpy(blob, dtb_data, dtb_size);
+	*len = dtb_size;
+	*blobp = blob;
+
+	return 0;
+}
+
 int xocl_refresh_subdevs(struct xocl_dev *xdev)
 {
 	struct xcl_mailbox_subdev_peer subdev_peer = {0};
@@ -833,7 +856,7 @@ int xocl_refresh_subdevs(struct xocl_dev *xdev)
 	char *blob = NULL;
 	char *tmp = NULL;
 	u32 blob_len = 0;
-	uint64_t checksum = 0;
+uint64_t checksum = 0;
 	size_t offset = 0;
 	bool offline = false;
 	int ret = 0;
@@ -847,6 +870,20 @@ int xocl_refresh_subdevs(struct xocl_dev *xdev)
 		xocl_drvinst_set_offline(xdev->core.drm, false);
 	}
 
+	/*
+	 * We assume this only works on v70pq2 and RAVE, thus,
+	 * we load fdt from dtb.o instead of get fdt from peer.
+	 * In the future, when versal-pci is upstreamed, we should
+	 *  - disable xclmgmt after a certain linux kernel version,
+	 *  - ask peer via mailbox to get supported version
+	 *  - load the fdt from dtb.o linked into xocl.ko
+	 */
+#if XOCL_VMGMT_MBX_PROTOCOL_VERSION(xdev) >= 1
+	userpf_info(xdev, "get fdt from dtb.o");
+	ret = xocl_vmgmt_get_fdt(xdev, &blob, &blob_len);
+	if (ret)
+		goto failed;
+#else
 	userpf_info(xdev, "get fdt from peer");
 	mb_req = vzalloc(reqlen);
 	if (!mb_req) {
@@ -917,7 +954,7 @@ int xocl_refresh_subdevs(struct xocl_dev *xdev)
 		ret = -EINVAL;
 		goto failed;
 	}
-
+#endif
 	if (xdev->core.fdt_blob) {
 		vfree(xdev->core.fdt_blob);
 		xdev->core.fdt_blob = NULL;

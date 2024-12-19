@@ -1943,6 +1943,21 @@ static int icap_peer_xclbin_prepare(struct icap *icap, struct axlf *xclbin,
 	uint32_t datalen = 0;
 	struct xcl_mailbox_req *mb_ptr = NULL;
 
+	if (XOCL_VMGMT_MBX_PROTOCOL_VERSION(xdev)) {
+		datalen = struct_size(mb_ptr, data, 1) +
+			sizeof(xuid_t);
+		mb_ptr = vmalloc(datalen);
+		if (!mb_ptr) {
+			ICAP_ERR(icap, "can't create mb_req\n");
+			return -ENOMEM;
+		}
+		mb_ptr->req = XCL_MAILBOX_REQ_LOAD_XCLBIN_UUID;
+		memcpy(mb_ptr->data, &xclbin->m_header.uuid, sizeof(xuid_t));
+
+		*mb_req = mb_ptr;
+		return datalen;
+	}
+
 	if ((ch_state & XCL_MB_PEER_SAME_DOMAIN) != 0) {
 		if (icap_ver == MULTISLOT_VERSION) {
 			struct xcl_mailbox_bitstream_slot_kaddr slot_mb_addr = {0};
@@ -2000,21 +2015,26 @@ static int icap_peer_xclbin_prepare(struct icap *icap, struct axlf *xclbin,
 			memcpy(data_ptr, xclbin, xclbin->m_header.m_length);
 		}
 		else {
+			//datalen = struct_size(mb_ptr, data, 1) +
+			//		xclbin->m_header.m_length;
 			datalen = struct_size(mb_ptr, data, 1) +
-				xclbin->m_header.m_length;
+				sizeof(xuid_t);
 			mb_ptr = vmalloc(datalen);
 			if (!mb_ptr) {
 				ICAP_ERR(icap, "can't create mb_req\n");
 				return -ENOMEM;
 			}
-			mb_ptr->req = XCL_MAILBOX_REQ_LOAD_XCLBIN;
-			memcpy(mb_ptr->data, xclbin, xclbin->m_header.m_length);
+			//mb_ptr->req = XCL_MAILBOX_REQ_LOAD_XCLBIN;
+			//memcpy(mb_ptr->data, xclbin, xclbin->m_header.m_length);
+			mb_ptr->req = XCL_MAILBOX_REQ_LOAD_XCLBIN_UUID;
+			memcpy(mb_ptr->data, &xclbin->m_header.uuid, sizeof(xuid_t));
 		}
 	}
 
 	*mb_req = mb_ptr;
 	return datalen;
 }
+
 
 static int __icap_peer_xclbin_download(struct icap *icap, struct axlf *xclbin, uint32_t slot_id)
 {

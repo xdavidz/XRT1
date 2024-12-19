@@ -202,6 +202,13 @@
 #elif LINUX_VERSION_CODE < KERNEL_VERSION(4, 13, 0)
 #define XOCL_UUID
 #endif
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 8, 0)
+#define XOCL_VMGMT_MBX_PROTOCOL_VERSION(xdev) 1
+#else
+#define XOCL_VMGMT_MBX_PROTOCOL_VERSION(xdev) 0
+#endif
+
 /* UUID helper functions not present in older kernels */
 #if defined(XOCL_UUID)
 static inline bool uuid_equal(const xuid_t *u1, const xuid_t *u2)
