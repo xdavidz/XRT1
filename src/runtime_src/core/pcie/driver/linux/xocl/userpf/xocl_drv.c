@@ -48,6 +48,9 @@
 
 #define MAX_SB_APERTURES		256
 
+extern unsigned char __dtb_versal_begin[];
+extern unsigned char __dtb_versal_end[];
+
 static const struct pci_device_id pciidlist[] = {
 	XOCL_USER_XDMA_PCI_IDS,
 	{ 0, }
@@ -1414,6 +1417,16 @@ static int xocl_vmgmt_refresh_suddevs(struct xocl_dev *xdev)
 	bool offline = false;
 	int ret = 0;
 
+	pr_warn("DZ_ in refresh subdevs");
+
+	const void *dtb_data = __dtb_versal_begin;
+	size_t dtb_size = __dtb_versal_end -
+		__dtb_versal_begin;
+
+	pr_warn("DZ__ found dtb size %zu\n", dtb_size);
+
+	/*here we assume the device tree is loaded */
+
 	store_pcie_link_info(xdev);
 
 	ret = xocl_drvinst_get_offline(xdev->core.drm, &offline);
@@ -1490,6 +1503,11 @@ failed:
 	return ret;
 }
 
+/* This poll should be only based on certain deviceid (v70 and rave)
+   when XRT is compiled with latest linux kernel that should look for
+   v70/rave versal-pci driver to become online. This poll will wait until
+   the peer mailbox is up and reporting version 1 from versal-pci driver.
+   */
 static void xocl_poll_mgmt_status(struct work_struct *w)
 {
 	struct xocl_dev_core *xdev = container_of(w, struct xocl_dev_core,

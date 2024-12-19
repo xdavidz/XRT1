@@ -41,6 +41,8 @@ endif
 
 endif
 
+versal-dtbs	:= versal.dtb versal.dts
+
 drv_common-y   := $(common_dir)/kds_hwctx.o \
 		  $(common_dir)/kds_core.o \
 		  $(common_dir)/xrt_cu.o \
@@ -100,6 +102,7 @@ xocl-y := \
 	../subdev/cu_xgq.o \
 	$(xocl_lib-y)	\
 	$(drv_common-y) \
+	versal.dtb.o	\
 	xocl_drv.o	\
 	xocl_errors.o	\
 	xocl_bo.o	\

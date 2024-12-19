@@ -1,0 +1,122 @@
+/dts-v1/;
+
+/ {
+	vbnv = "xilinx:v70pq2:gen5x8_qdma_base:2";
+	logic_uuid = "40dd2cb6ab0297ec22e00d7fcdc7aa6c";
+	vrom = <0x786c6e78 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x78696c69 0x6e785f76 0x37307071 0x325f6765 0x6e357838 0x5f71646d 0x615f6261 0x73655f32 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x1000000 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00>;
+	vmr_status = <0x1000100 0x00>;
+
+	partition_info_0 {
+		__INFO = "{\"revision_control\":{\"card\":\"v70pq2\",\"family\":\"gen5x8_qdma\",\"package_name\":\"xilinx-v70pq2-gen5x8-qdma-base\",\"package_version\":\"2\",\"package_release\":\"20231203\",\"build_changelist\":\"3923260\",\"hardware_changelist\":\"4070359\",\"dtb_commithash\":\"1a5881d\"}}\n";
+	};
+
+	addressable_endpoints {
+
+		ep_xgq_payload_user_00 {
+			partition_level = <0x01>;
+			pcie_bar_mapping = <0x02>;
+			pcie_physical_function = <0x01>;
+			reg = <0x00 0x6000000 0x00 0x1000000>;
+		};
+
+		ep_mailbox_user_00 {
+			partition_level = <0x01>;
+			pcie_bar_mapping = <0x02>;
+			interrupts = <0x08 0x08>;
+			pcie_physical_function = <0x01>;
+			reg = <0x00 0x2000000 0x00 0x1000>;
+		};
+
+		ep_bar_layout_user_00 {
+			partition_level = <0x01>;
+			pcie_bar_mapping = <0x02>;
+			pcie_physical_function = <0x01>;
+			reg = <0x00 0x2001000 0x00 0x1000>;
+		};
+
+		ep_xgq_user_to_apu_sq_pi_03 {
+			partition_level = <0x01>;
+			pcie_bar_mapping = <0x02>;
+			interrupts = <0x0c 0x0c>;
+			pcie_physical_function = <0x01>;
+			reg = <0x00 0x2013000 0x00 0x1000>;
+		};
+
+		ep_xgq_user_to_apu_sq_pi_02 {
+			partition_level = <0x01>;
+			pcie_bar_mapping = <0x02>;
+			interrupts = <0x0b 0x0b>;
+			pcie_physical_function = <0x01>;
+			reg = <0x00 0x2012000 0x00 0x1000>;
+		};
+
+		ep_xgq_user_to_apu_sq_pi_01 {
+			partition_level = <0x01>;
+			pcie_bar_mapping = <0x02>;
+			interrupts = <0x0a 0x0a>;
+			pcie_physical_function = <0x01>;
+			reg = <0x00 0x2011000 0x00 0x1000>;
+		};
+
+		ep_xgq_user_to_apu_sq_pi_00 {
+			partition_level = <0x01>;
+			pcie_bar_mapping = <0x02>;
+			interrupts = <0x09 0x09>;
+			pcie_physical_function = <0x01>;
+			reg = <0x00 0x2010000 0x00 0x1000>;
+		};
+
+		ep_qdma_00 {
+			partition_level = <0x01>;
+			pcie_bar_mapping = <0x00>;
+			pcie_physical_function = <0x01>;
+			reg = <0x00 0x00 0x00 0x80000>;
+		};
+
+		ep_reserved_ps_mem_01 {
+			partition_level = <0x01>;
+			pcie_bar_mapping = <0x00>;
+			compatible = "xilinx.com,reg_abs-ps_memory-1.0\0ps_memory";
+			pcie_physical_function = <0x01>;
+			reg = <0x600 0x00 0x02 0x00>;
+		};
+
+		ep_reserved_ps_mem_00 {
+			partition_level = <0x01>;
+			pcie_bar_mapping = <0x00>;
+			compatible = "xilinx.com,reg_abs-ps_memory-1.0\0ps_memory";
+			pcie_physical_function = <0x01>;
+			reg = <0x501 0x00 0x01 0x00>;
+		};
+	};
+
+	pcie {
+
+		bars {
+
+			3 {
+				reg = <0x202 0x00 0x00 0x8000000>;
+				pcie_physical_function = <0x01>;
+				pcie_bar_mapping = <0x02>;
+			};
+
+			2 {
+				reg = <0x00 0x00 0x00 0x80000>;
+				pcie_physical_function = <0x01>;
+				pcie_bar_mapping = <0x00>;
+			};
+		};
+	};
+
+	interfaces {
+
+		@0 {
+			interface_uuid = "96df7d2e967ee6acb7b4dc6b9889ff87";
+		};
+	};
+
+	schema_version {
+		minor = <0x00>;
+		major = <0x01>;
+	};
+};
